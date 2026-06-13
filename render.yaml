@@ -1,0 +1,58 @@
+# Render Blueprint —— 一键部署到 Render
+# 用法：把本仓库推到 GitHub → Render 控制台 New → Blueprint → 选中本仓库
+# 详见 RENDER部署.md
+
+databases:
+  - name: hsr-db
+    databaseName: hsr
+    user: hsr
+    plan: free            # 试用；正式使用请改为付费实例（免费库有存续期限制）
+
+services:
+  # ---------- 后端 API（Docker） ----------
+  - type: web
+    name: hsr-backend
+    runtime: docker
+    rootDir: backend
+    plan: free            # 免费实例闲置会休眠，首次请求冷启动较慢；正式用付费
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hsr-db
+          property: connectionString   # 注入内网连接串（postgresql://...）
+      - key: SECRET_KEY
+        generateValue: true            # 由 Render 生成随机密钥
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "720"
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false                    # 创建蓝图时提示输入（不写进仓库）
+      - key: ADMIN_NAME
+        value: 标准管理员
+      - key: CORS_ORIGINS
+        value: "*"                     # 前端经 rewrite 同源访问，CORS 实际不触发
+
+  # ---------- 前端（静态站点） ----------
+  - type: web
+    name: hsr-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+    envVars:
+      - key: VITE_API_BASE
+        value: /api/v1                 # 相对地址，由下方 rewrite 反代到后端
+    routes:
+      # 把 /api/* 反向代理到后端公网地址（同源，免跨域）
+      # ⚠ 若后端实际 URL 带了随机后缀，请把下面这行改成真实地址后重新部署
+      - type: rewrite
+        source: /api/*
+        destination: https://hsr-backend.onrender.com/api/*
+      # SPA 路由回退
+      - type: rewrite
+        source: /*
+        destination: /index.html
