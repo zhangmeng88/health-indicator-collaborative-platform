@@ -33,7 +33,20 @@ async function request(path, { method = "GET", body, form, auth = true } = {}) {
   if (res.status === 204) return null;
 
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      // 响应不是 JSON：多为代理/网关返回的 404/502 纯文本，说明请求没打到后端。
+      const snippet = text.trim().slice(0, 120);
+      throw new Error(
+        res.ok
+          ? `服务器返回了非 JSON 内容：${snippet}`
+          : `接口未正确路由 (${res.status})：${snippet}。请检查 API 地址 / 反向代理配置。`
+      );
+    }
+  }
   if (!res.ok) {
     const detail = data?.detail;
     throw new Error(typeof detail === "string" ? detail : (detail ? JSON.stringify(detail) : `请求失败 (${res.status})`));
