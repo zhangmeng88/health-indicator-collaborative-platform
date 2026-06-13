@@ -14,6 +14,8 @@ services:
     name: hsr-backend
     runtime: docker
     rootDir: backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     plan: free            # 免费实例闲置会休眠，首次请求冷启动较慢；正式用付费
     healthCheckPath: /health
     autoDeploy: true
@@ -39,9 +41,11 @@ services:
   - type: web
     name: hsr-frontend
     runtime: static
-    rootDir: frontend
-    buildCommand: npm ci && npm run build
-    staticPublishPath: dist
+    # 静态站点不用 rootDir：在 buildCommand 里 cd 进子目录，
+    # staticPublishPath 用「相对仓库根」的完整路径。
+    # 这是 Render 官方 monorepo 示例写法，可避免 “Publish directory dist does not exist”。
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: ./frontend/dist
     autoDeploy: true
     envVars:
       - key: VITE_API_BASE
