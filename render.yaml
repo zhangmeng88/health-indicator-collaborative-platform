@@ -41,13 +41,14 @@ services:
   - type: web
     name: hsr-frontend
     runtime: static
-    # 静态站点不用 rootDir：在 buildCommand 里 cd 进子目录，
-    # staticPublishPath 用「相对仓库根」的完整路径。
-    # 这是 Render 官方 monorepo 示例写法，可避免 “Publish directory dist does not exist”。
+    # 单行构建命令（Render 对多行 buildCommand 解析不稳，会被当成空命令）。
+    # 不用 rootDir：cd 进子目录，publish 用相对仓库根的完整路径。
     buildCommand: cd frontend && npm ci && npm run build
     staticPublishPath: ./frontend/dist
     autoDeploy: true
     envVars:
+      - key: NODE_VERSION
+        value: "20"
       - key: VITE_API_BASE
         value: /api/v1                 # 相对地址，由下方 rewrite 反代到后端
     routes:

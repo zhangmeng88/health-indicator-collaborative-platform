@@ -119,4 +119,29 @@ export const api = {
   // 导出
   exportExcel: () => download("/export/excel", "卫生统计指标.xlsx"),
   exportWord: () => download("/export/word", "卫生统计指标.docx"),
+
+  // 上传导入（管理员）：上传主表 xlsx 批量导入
+  importStandard: async (file, update = false) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${BASE}/import/xlsx?update=${update ? "true" : "false"}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${tokenStore.get()}` },
+      body: form,
+    });
+    if (res.status === 401) { tokenStore.clear(); onUnauthorized(); throw new Error("登录已失效，请重新登录"); }
+    const text = await res.text();
+    let data = null;
+    if (text) {
+      try { data = JSON.parse(text); }
+      catch {
+        throw new Error(res.ok ? "服务器返回了非 JSON 内容" : `导入失败 (${res.status})：${text.trim().slice(0, 120)}`);
+      }
+    }
+    if (!res.ok) {
+      const detail = data?.detail;
+      throw new Error(typeof detail === "string" ? detail : (detail ? JSON.stringify(detail) : `导入失败 (${res.status})`));
+    }
+    return data;
+  },
 };

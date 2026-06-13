@@ -12,7 +12,7 @@ from .config import settings
 from .database import Base, engine, SessionLocal
 from . import models  # noqa: F401  确保模型被注册
 from .seed import seed
-from .routers import auth, users, classifications, indicators, suggestions, comments, export
+from .routers import auth, users, classifications, indicators, suggestions, comments, export, imports
 
 
 @asynccontextmanager
@@ -37,7 +37,7 @@ app.add_middleware(
 )
 
 API = "/api/v1"
-for r in (auth, users, classifications, indicators, suggestions, comments, export):
+for r in (auth, users, classifications, indicators, suggestions, comments, export, imports):
     app.include_router(r.router, prefix=API)
 
 

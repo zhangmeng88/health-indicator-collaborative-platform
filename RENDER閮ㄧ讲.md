@@ -35,7 +35,9 @@ Blueprint 里前端把 API 反代到了 `https://hsr-backend.onrender.com`。如
 
 ## 四、导入完整指标数据
 
-最简单的方式：从你本机直连 Render 数据库的**外部连接串**导入（无需把数据文件放进仓库）。
+**最简单：网页上传（推荐）。** 用管理员登录平台 → 左侧「导入 / 导出」→「上传现有标准」→ 选择 `2018卫生统计指标完整.xlsx` → 开始导入。导入完成会显示新增/跳过数量，指标随即出现在「指标总览」。按标识符去重，可重复上传。
+
+**备选：命令行直连数据库导入。** 适合批量/自动化场景。
 
 1. 在 Render 数据库页复制 **External Database URL**（形如 `postgresql://user:pwd@xxx.oregon-postgres.render.com/hsr`）。
 2. 本机执行（需 Python，且装好 openpyxl、psycopg2-binary、SQLAlchemy）：

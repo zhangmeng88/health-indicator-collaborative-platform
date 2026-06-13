@@ -79,28 +79,72 @@ def export_excel(admin: User = Depends(require_admin), db: Session = Depends(get
 @router.get("/word", summary="导出 Word")
 def export_word(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     from docx import Document
-    from docx.shared import Pt
+    from docx.shared import Pt, Cm, RGBColor
+    from docx.oxml.ns import qn
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+
+    # 每个指标按此顺序，逐行输出（左列字段名，右列内容）
+    FIELDS = [
+        ("来源标准/部分", lambda i: i.source_standard.title if i.source_standard else ""),
+        ("标识符", lambda i: i.identifier),
+        ("中文名称", lambda i: i.name_cn),
+        ("英文名称", lambda i: i.name_en),
+        ("计量单位", lambda i: i.unit),
+        ("定义", lambda i: i.definition),
+        ("计算方法", lambda i: i.method),
+        ("指标说明", lambda i: i.description),
+        ("调查方法", lambda i: i.survey_method),
+        ("数据来源", lambda i: i.data_source),
+        ("发布频率", lambda i: i.frequency),
+    ]
+
+    def style_run(run, size=10.5, bold=False, color=None):
+        """中文宋体、英文 Times New Roman。"""
+        run.font.name = "Times New Roman"
+        run.font.size = Pt(size)
+        run.font.bold = bold
+        if color is not None:
+            run.font.color.rgb = color
+        rpr = run._element.get_or_add_rPr()
+        rpr.get_or_add_rFonts().set(qn("w:eastAsia"), "宋体")
+
+    def write_cell(cell, text, bold=False):
+        cell.text = ""
+        run = cell.paragraphs[0].add_run("" if text is None else str(text))
+        style_run(run, bold=bold)
 
     doc = Document()
-    doc.add_heading("卫生统计指标（含元数据）", level=0)
+    # 文档默认样式：中文宋体、英文 Times New Roman
+    normal = doc.styles["Normal"]
+    normal.font.name = "Times New Roman"
+    normal.font.size = Pt(10.5)
+    normal.element.get_or_add_rPr().get_or_add_rFonts().set(qn("w:eastAsia"), "宋体")
+
+    title = doc.add_heading(level=0)
+    style_run(title.add_run("卫生统计指标（含元数据）"), size=18, bold=True, color=RGBColor(0x1F, 0x4E, 0x5F))
+
+    def add_heading(text, level):
+        h = doc.add_heading(level=level)
+        style_run(h.add_run(text), size={1: 15, 2: 13, 3: 12, 4: 12}.get(level, 12),
+                  bold=True, color=RGBColor(0x0F, 0x76, 0x6E))
 
     def emit(parent_id=None, depth=1):
         nodes = (db.query(Classification).filter(Classification.parent_id == parent_id)
                  .order_by(Classification.sort_order, Classification.id).all())
         for n in nodes:
-            doc.add_heading(n.name, level=min(depth, 4))
-            inds = _indicators(db, n.id)
-            if inds:
-                cols = ["标识符", "中文名称", "英文名称", "单位", "定义", "计算方法", "指标说明", "调查方法", "数据来源", "发布频率"]
-                t = doc.add_table(rows=1, cols=len(cols)); t.style = "Light Grid Accent 1"
-                for i, h in enumerate(cols):
-                    t.rows[0].cells[i].text = h
-                for ind in inds:
-                    cells = t.add_row().cells
-                    vals = [ind.identifier, ind.name_cn, ind.name_en, ind.unit, ind.definition,
-                            ind.method, ind.description, ind.survey_method, ind.data_source, ind.frequency]
-                    for i, v in enumerate(vals):
-                        cells[i].text = v or ""
+            add_heading(n.name, min(depth, 4))
+            for ind in _indicators(db, n.id):
+                tbl = doc.add_table(rows=0, cols=2)
+                tbl.style = "Table Grid"
+                tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+                tbl.autofit = False
+                for label, getter in FIELDS:
+                    cells = tbl.add_row().cells
+                    write_cell(cells[0], label, bold=True)
+                    write_cell(cells[1], getter(ind))
+                    cells[0].width = Cm(3.2)
+                    cells[1].width = Cm(13.8)
+                doc.add_paragraph()  # 指标间留白
             emit(n.id, depth + 1)
 
     emit()

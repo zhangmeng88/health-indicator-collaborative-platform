@@ -3,7 +3,7 @@ import {
   LogIn, LogOut, RefreshCw, Users, ListTree, ClipboardCheck, Download,
   Search, Plus, Pencil, Trash2, MessageSquare, Check, X, ChevronRight,
   ChevronDown, KeyRound, ShieldCheck, FileText, FileSpreadsheet,
-  AlertCircle, Layers, BookOpen, Clock, UserPlus, Star
+  AlertCircle, Layers, BookOpen, Clock, UserPlus, Star, Upload
 } from "lucide-react";
 import { api, tokenStore, setUnauthorizedHandler } from "./api";
 
@@ -147,7 +147,7 @@ export default function App() {
     { id: "review", label: "建议审核", icon: ClipboardCheck, badge: pending },
     { id: "hierarchy", label: "分类层级", icon: ListTree },
     { id: "accounts", label: "专家账户", icon: Users },
-    { id: "export", label: "导出标准", icon: Download },
+    { id: "export", label: "导入 / 导出", icon: Download },
   ];
   const expertTabs = [
     { id: "browse", label: "指标浏览与编辑", icon: BookOpen },
@@ -589,14 +589,53 @@ function Accounts(ctx) {
   );
 }
 
-/* ------------------------- 导出（管理员） ------------------------- */
+/* ------------------------- 导入 / 导出（管理员） ------------------------- */
 function Export(ctx) {
-  const { indicators, hierarchy, flash, guard } = ctx;
+  const { indicators, hierarchy, flash, guard, reloadIndicators, reloadHierarchy } = ctx;
   const flat = useMemo(() => flatten(hierarchy), [hierarchy]);
   const maxDepth = flat.reduce((m, f) => Math.max(m, f.depth), 0);
+  const [file, setFile] = useState(null);
+  const [overwrite, setOverwrite] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const doImport = () => guard(async () => {
+    if (!file) return flash("请先选择 .xlsx 文件");
+    setBusy(true); setResult(null);
+    try {
+      const r = await api.importStandard(file, overwrite);
+      setResult(r);
+      await Promise.all([reloadIndicators(), reloadHierarchy()]);
+      flash(`导入完成：新增 ${r.inserted}，更新 ${r.updated}，跳过 ${r.skipped}`);
+    } finally { setBusy(false); }
+  });
+
   return (
-    <div className="max-w-2xl">
-      <div className="mb-4 rounded-lg border border-slate-200 bg-white p-5">
+    <div className="max-w-2xl space-y-4">
+      {/* 上传导入 */}
+      <div className="rounded-lg border border-slate-200 bg-white p-5">
+        <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-slate-700"><Upload size={15} /> 上传现有标准（批量导入）</h3>
+        <p className="mb-3 text-sm text-slate-500">选择主表 <span className="font-mono">.xlsx</span>（需含 来源标准/部分、一级/二级/三级分类、标识符、中文名称…发布频率 等列）。按「标识符」去重，可重复上传；勾选下方选项可覆盖更新已存在指标。</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <input type="file" accept=".xlsx,.xlsm" onChange={(e) => { setFile(e.target.files?.[0] || null); setResult(null); }}
+            className="block text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-teal-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-teal-700 hover:file:bg-teal-100" />
+          <label className="flex items-center gap-1.5 text-sm text-slate-600">
+            <input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} className="rounded border-slate-300" />
+            覆盖更新已存在指标
+          </label>
+          <Btn onClick={doImport} disabled={busy || !file}>{busy ? "导入中…" : "开始导入"}</Btn>
+        </div>
+        {file && <p className="mt-2 text-xs text-slate-400">已选择：{file.name}</p>}
+        {result && (
+          <div className="mt-3 rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            导入完成 —— 新增 <b>{result.inserted}</b>、更新 <b>{result.updated}</b>、跳过 <b>{result.skipped}</b>；
+            来源标准 {result.sources} 项，分类节点 {result.classifications} 个。
+          </div>
+        )}
+      </div>
+
+      {/* 导出 */}
+      <div className="rounded-lg border border-slate-200 bg-white p-5">
         <h3 className="mb-1 text-sm font-semibold text-slate-700">导出概览</h3>
         <p className="text-sm text-slate-500">当前标准共 <span className="font-semibold text-teal-700">{indicators.length}</span> 项有效指标，分布于 <span className="font-semibold text-teal-700">{flat.length}</span> 个分类节点，层级深度 <span className="font-semibold text-teal-700">{maxDepth + 1}</span> 级。导出由后端生成，列序与主表一致：来源标准/部分、一级/二级/三级分类、标识符、中文名称、英文名称、计量单位、定义、计算方法、指标说明、调查方法、数据来源、发布频率。</p>
       </div>
